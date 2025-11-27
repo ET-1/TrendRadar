@@ -4225,42 +4225,10 @@ def send_to_bark(
     mode: str = "daily",
     html_file_path: Optional[str] = None,
 ) -> bool:
-    """发送到Bark（支持分批发送，使用纯文本格式，支持美化）"""
+    """发送到Bark（支持分批发送，使用纯文本格式）"""
     proxies = None
     if proxy_url:
         proxies = {"http": proxy_url, "https": proxy_url}
-
-    # 计算总新闻数
-    total_titles = sum(
-        len(stat["titles"]) for stat in report_data["stats"] if stat["count"] > 0
-    )
-    
-    # 根据报告类型设置图标和标题
-    icon_map = {
-        "当日汇总": "https://api.iconify.design/mdi:newspaper-variant.svg?color=%234f46e5",
-        "当前榜单汇总": "https://api.iconify.design/mdi:chart-line.svg?color=%234f46e5",
-        "增量更新": "https://api.iconify.design/mdi:update.svg?color=%234f46e5",
-        "实时增量": "https://api.iconify.design/mdi:lightning-bolt.svg?color=%23f59e0b",
-        "实时当前榜单": "https://api.iconify.design/mdi:chart-bar.svg?color=%234f46e5",
-    }
-    
-    emoji_map = {
-        "当日汇总": "📊",
-        "当前榜单汇总": "📈",
-        "增量更新": "🆕",
-        "实时增量": "⚡",
-        "实时当前榜单": "📋",
-    }
-    
-    # 获取图标和emoji
-    icon_url = icon_map.get(report_type, "https://api.iconify.design/mdi:bell.svg?color=%234f46e5")
-    emoji = emoji_map.get(report_type, "📰")
-    
-    # 构建美化后的标题
-    if total_titles > 0:
-        beautified_title = f"{emoji} {report_type} ({total_titles}条)"
-    else:
-        beautified_title = f"{emoji} {report_type}"
 
     # 获取分批内容（Bark 限制为 3600 字节以避免 413 错误）
     batches = split_content_into_batches(
@@ -4289,9 +4257,6 @@ def send_to_bark(
 
         # 清理 markdown 语法（Bark 不支持 markdown）
         plain_content = strip_markdown(batch_content)
-        
-        # 美化内容格式，提升可读性
-        plain_content = beautify_bark_content(plain_content)
 
         batch_size = len(plain_content.encode("utf-8"))
         print(
@@ -4304,23 +4269,17 @@ def send_to_bark(
                 f"警告：Bark第 {actual_batch_num}/{total_batches} 批次消息过大（{batch_size} 字节），可能被拒绝"
             )
 
-        # 构建JSON payload（增强版）
+        # 构建JSON payload
         payload = {
-            "title": beautified_title,
+            "title": report_type,
             "body": plain_content,
+            "sound": "default",
             "group": "TrendRadar",
-            "icon": icon_url,
         }
         
-        # 添加角标（仅第一批次显示总新闻数）
-        if idx == 1 and total_titles > 0:
-            payload["badge"] = total_titles
-        
-        # 添加跳转链接（如果有HTML报告，仅第一批次）
-        if idx == 1 and html_file_path and Path(html_file_path).exists():
-            # 转换为file://协议URL
-            file_url = "file://" + str(Path(html_file_path).resolve())
-            payload["url"] = file_url
+        # 添加跳转链接（仅第一批次，指向GitHub Pages）
+        if idx == 1:
+            payload["url"] = "https://et-1.github.io/TrendRadar/"
 
         try:
             response = requests.post(
